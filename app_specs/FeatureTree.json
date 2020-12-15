@@ -14,8 +14,8 @@
         {
             "id": "sequence_source",
             "type" : "enum",
-            "required": 1,
-            "enum" : ["ws", "upload", "local_file"]
+            "default": "ws",
+            "enum" : ["ws", "upload", "local_file", "feature_ids", "feature_group"]
         },
         {
             "id": "aligned_status",

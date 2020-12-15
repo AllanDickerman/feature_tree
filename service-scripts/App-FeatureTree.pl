@@ -92,6 +92,14 @@ sub build_tree {
         print STDERR "input data file is $seq_file_name\n";
         File::Slurp::write_file("$tmpdir/$seq_file_name", $params->{sequences})
     }
+    elsif ($params->{sequence_source} eq 'feature_group') {
+        # need to get sequences from database by feature_id
+        print STDERR "input file is feature_group: \n", $params->{sequences},"\n";
+        ## first download feature group as json 
+        #$app->workspace->download_file($params->{sequences}, "$tmpdir/${seq_file_name}_feature_group.txt", 1, $global_token);
+        #my $feature_group = $app->workspace->download_file($params->{sequences}, $global_token);
+        #for    
+    }
     run("echo $tmpdir && ls -ltr $tmpdir");
 
     my $model = "AUTO"; # default for protein
