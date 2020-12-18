@@ -15,7 +15,7 @@
             "id": "sequence_source",
             "type" : "enum",
             "default": "ws",
-            "enum" : ["ws", "upload", "local_file", "feature_ids", "feature_group"]
+            "enum" : ["ws", "upload", "local_file"]
         },
         {
             "id": "aligned_status",
@@ -29,6 +29,14 @@
             "desc": "Sequence alphabet: DNA or RNA or Protein",
             "type": "enum",
             "enum": ["DNA", "Protein"]
+        },
+        {
+            "id": "dna_model",
+            "label": "DNA Model",
+            "required": 0,
+            "default": "GTR",
+            "type": "enum",
+            "enum": ["HKY85", "JC69", "K80", "F81", "F84", "TN93", "GTR"]
         },
         {
             "id": "protein_model",

@@ -14,7 +14,8 @@ use File::Copy ('copy', 'move');
 use Bio::KBase::AppService::AppConfig;
 use Bio::KBase::AppService::AppScript;
 use Cwd;
-use Feature_Alignment; # should be in lib directory
+use URI::Escape;
+use Sequence_Alignment; # should be in lib directory
 
 our $global_ws;
 our $global_token;
@@ -23,16 +24,6 @@ our $shock_cutoff = 10_000;
 
 my $testing = 1;
 print "args = ", join("\n", @ARGV), "\n";
-
-if ( -e $ARGV[0]) { #testing
-    #my $temp_params = JSON::decode_json(`cat /homes/allan/git/dev_container/modules/feature_tree/app_specs/instantiated_FeatureTree_1.json`);
-    print "Testing with json file $ARGV[0]\n";
-    my $json_data = File::Slurp::read_file($ARGV[0]);
-    my $temp_params = JSON::decode_json($json_data);
-    print " now call build_tree with the json object\n";
-    my $rc = build_tree('FeatureTree', undef, undef, $temp_params);
-    exit $rc;
-}
 
 my $data_url = Bio::KBase::AppService::AppConfig->data_api_url;
 #my $data_url = "http://www.alpha.patricbrc.org/api";
@@ -59,10 +50,12 @@ sub build_tree {
     my ($app, $app_def, $raw_params, $params) = @_;
 
     print "Proc FeatureTree build_tree ", Dumper($app_def, $raw_params, $params);
+    $global_token = $app->token();
+    $global_token = read_file("/homes/allan/.patric_token");
+    print STDERR "Global token = $global_token\n";
     my $time1 = `date`;
 
     my $recipe = $params->{recipe};
-    
     my $tmpdir = File::Temp->newdir( "/tmp/FeatureTree_XXXXX", CLEANUP => 0 );
     system("chmod", "755", "$tmpdir");
     print STDERR "$tmpdir\n";
@@ -95,15 +88,27 @@ sub build_tree {
     elsif ($params->{sequence_source} eq 'feature_group') {
         # need to get sequences from database by feature_id
         print STDERR "input file is feature_group: \n", $params->{sequences},"\n";
-        ## first download feature group as json 
-        #$app->workspace->download_file($params->{sequences}, "$tmpdir/${seq_file_name}_feature_group.txt", 1, $global_token);
-        #my $feature_group = $app->workspace->download_file($params->{sequences}, $global_token);
-        #for    
+        my $unaligned_fasta = get_feature_group_sequences($params->{sequences}, $params->{alphabet});
+        $seq_file_name = basename($params->{sequences}).".afa";
+        my $unaligned_seq_file = basename($params->{sequences})."_unaligned.fa";
+        open UNALIGNED, ">", "$tmpdir/$unaligned_seq_file";
+        for my $id (keys %$unaligned_fasta) {
+            print UNALIGNED ">$id\n$unaligned_fasta->{$id}\n";
+        }
+        close UNALIGNED;
+        run_muscle("$tmpdir/$unaligned_seq_file", "$tmpdir/$seq_file_name");
+        if (lc($recipe) eq 'phyml') {
+            open my $ALIGNED, "$tmpdir/$seq_file_name" or die "could not open aligned fasta";
+            my $alignment = new Sequence_Alignment($ALIGNED);
+            $seq_file_name = basename($params->{sequences}).".phy";
+            open my $PHYLIP, ">", "$tmpdir/$seq_file_name" or die "could not open file to receive phylip";
+            $alignment->write_phylip($PHYLIP);
+        }
     }
     run("echo $tmpdir && ls -ltr $tmpdir");
 
     my $model = "AUTO"; # default for protein
-    if ($params->{alphabet} eq 'Protein' and $params->{protein_model}) {
+    if (lc($params->{alphabet}) eq 'protein' and $params->{protein_model}) {
         $model = $params->{protein_model}
     }
     elsif ($params->{alphabet} eq 'DNA') {
@@ -111,7 +116,7 @@ sub build_tree {
     }
     my $output_name = $params->{output_file};
     my $alphabet = $params->{alphabet};
-
+    print STDERR "About to call tree program on $seq_file_name\n";
     my @outputs;
     if (lc($recipe) eq 'raxml') {
         @outputs = run_raxml($seq_file_name, $alphabet, $model, $output_name, $tmpdir);
@@ -158,7 +163,7 @@ sub build_tree {
 
 sub run_raxml {
     my ($alignment_file, $alphabet, $model, $output_name, $tmpdir) = @_;
-
+    print STDERR "In run_raxml, alignment = $alignment_file\n";
     my $parallel = $ENV{P3_ALLOCATED_CPU};
     $parallel = 2 if $parallel < 2;
     
@@ -230,6 +235,76 @@ sub run_phyml {
     run("echo $tmpdir && ls -ltr $tmpdir");
 
     return @outputs;
+}
+
+sub get_feature_group_sequences {
+    #" Borrowed from app_service_scripts/App-GenomeComparison.pl"
+    my ($group, $seq_type) = @_;
+    my $seq_field_md5 = (lc($seq_type) eq "protein") ? 'aa_sequence_md5' : 'na_sequence_md5';
+
+    my $escaped = uri_escape($group);
+    my $url = "$data_url/genome_feature/?in(feature_id,FeatureGroup($escaped))&select(patric_id,$seq_field_md5)&http_accept=application/json&limit(25000)";
+    my $resp = curl_json($url);
+    my @patric_ids;
+    my %md5_to_patric_id;
+    for my $member (@$resp) {
+        $md5_to_patric_id{$member->{$seq_field_md5}} = $member->{'patric_id'};
+        #print $member->{'patric_id'}, "\n";
+    }
+    print "Number of patric IDs from group: ", scalar %md5_to_patric_id, "\n";
+    for my $i (0..5) {
+        print "member $i: $resp->[$i]{'patric_id'}, $resp->[$i]{aa_sequence_md5}\n"; 
+    }
+    #my $list = join(",", map { uri_escape(qq("$_")) } @md5_sums);
+    my $list = join(",", keys(%md5_to_patric_id));
+    $url = "$data_url/feature_sequence/?in(md5,($list))&select(md5,sequence)&http_accept=application/json&limit(25000)";
+
+    $resp = curl_json($url);
+    print "response = \n\n$resp\n";
+    my %patric_id_to_sequence;
+    my $i = 0;
+    for my $member (@$resp) {
+        my $md5 = $member->{md5};
+        my $sequence = $member->{'sequence'};
+        my $patric_id = $md5_to_patric_id{$md5};
+        $patric_id_to_sequence{$patric_id} = $sequence;
+        if ($i < 5) {
+            print STDERR "$md5\t$patric_id\t$sequence\n";
+            $i++;
+        }
+    }
+    return \%patric_id_to_sequence;
+}
+
+sub run_muscle {
+    my ($unaligned, $aligned) = @_;
+    my $cmd = ["muscle", "-in", $unaligned, "-out", $aligned];
+    return run_cmd($cmd);
+}
+
+sub curl_text {
+    my ($url) = @_;
+    my @cmd = ("curl", $url, curl_options());
+    my $cmd = join(" ", @cmd);
+    #$cmd =~ s/sig=[a-z0-9]*/sig=XXXX/g;
+    print STDERR "$cmd\n";
+    my ($out) = run_cmd(\@cmd);
+    return $out;
+}
+
+sub curl_json {
+    my ($url) = @_;
+    my $out = curl_text($url);
+    my $hash = JSON::decode_json($out);
+    return $hash;
+}
+
+sub curl_options {
+    my @opts;
+    my $token = $global_token;
+    push(@opts, "-H", "Authorization:$token");
+    #push(@opts, "-H", "Content-Type: multipart/form-data");
+    return @opts;
 }
 
 sub run_cmd {
