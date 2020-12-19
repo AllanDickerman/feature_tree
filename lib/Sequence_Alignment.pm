@@ -155,7 +155,17 @@ sub read_file {
             $self->{_is_aligned} = 0;
             $self->{_length} = max($self->{_length}, length($self->{_seqs}{$id}))
         }
-        print STDERR "id $id ; len ", length($self->{_seqs}{$id}), " ; is_al=$self->{_is_aligned} \n";
+        #print STDERR "id $id ; len ", length($self->{_seqs}{$id}), " ; is_al=$self->{_is_aligned} \n";
+    }
+}
+
+sub write_fasta {
+  # write out in fasta format
+    my $self = shift;
+    my $outfh = shift;
+    print STDERR "In write_fasta\n";
+    foreach my $id (@{$self->{_ids}}) {
+        print $outfh ">",$id, "\n", $self->{_seqs}->{$id}, "\n";
     }
 }
 
@@ -179,5 +189,84 @@ sub write_phylip {
 	    printf($outfh "%-${maxIdLength}s %s\n", $id, $seq);
     }
 }
+
+sub calc_column_gap_count {
+    my $self = shift;
+    print STDERR "In calc_column_gap_count\n";
+    my @gap_count;
+    $#gap_count = $self->{_length};
+    for my $id (@{$self->{_ids}}) {
+        for my $i (0..$self->{_length}-1) {
+            $gap_count[$i] += substr($self->{_seqs}->{$id},$i, 1) eq '-';
+        }
+    }
+    return \@gap_count;
+}
+
+
+sub end_trim {
+    # trim gappy ends inward to a minimum occupancy threshold (proportion of non-gap chars)
+    my $self = shift;
+    my $threshold = shift;
+    print STDERR "In end_trim($threshold)\n";
+    ($threshold <= 1.0 and $threshold > 0) or die "threshold must be between 0 and 1";
+    my $gap_count = $self->calc_column_gap_count();
+    my $max_gaps = (1.0 - $threshold) * $self->get_ntaxa();
+    my $start = 0;
+    my $vis = '';
+    my $vis2 = '';
+    for my $i (0 .. $self->{_length}-1) {
+        my $prop10 = int(10 * $gap_count->[$i] / $self->get_ntaxa());
+        $prop10 = 9 if $prop10 > 9;
+        $vis .= $prop10;
+        $vis2 .= $i % 10;
+    }
+
+    #print "$vis\n$vis2\n";
+    $start++ while ($start < $self->{_length}-1 and $gap_count->[$start] > $max_gaps);
+    my $end = $self->{_length}-1;
+    $end-- while ($end and $gap_count->[$end] > $max_gaps);
+    my $len = $end - $start + 1;
+    print "Trim up to $start and after $end\n";
+    #print substr($vis, $start, $len), "\n";
+    #print substr($vis2, $start, $len), "\n";
+    for my $id (@{$self->{_ids}}) {
+            $self->{_seqs}->{$id} = substr($self->{_seqs}->{$id}, $start, $len);
+    }
+    $self->{_length} = $len;
+}
+
+sub calc_row_gap_count
+{
+    my $self = shift;
+    print STDERR "In calc_row_gap_count\n";
+    my %gap_count;
+    for my $id (@{$self->{_ids}}) {
+        $gap_count{$id} = $self->{_seqs}->{$id} =~ tr/-/-/;
+    }
+    return \%gap_count;
+}
+
+sub delete_gappy_seqs {
+    # remove gappy sequences below minimum occupancy threshold (proportion of non-gap chars)
+    my $self = shift;
+    my $threshold = shift;
+    print STDERR "In delete_gappy_seqs($threshold)\n";
+    ($threshold <= 1.0 and $threshold > 0) or die "threshold must be between 0 and 1";
+    my $gap_count = $self->calc_row_gap_count();
+    my $max_gaps = (1.0 - $threshold)*$self->{_length};
+    my $index = 0;
+    for my $id (@{$self->{_ids}}) {
+        if ($gap_count->{$id} > $max_gaps) {
+            # remove id from list and seq from hash
+            delete($self->{_seqs}->{$id});
+            splice @{$self->{_ids}}, $index, 1;
+            print STDERR "seq $id has $gap_count->{$id} gaps, deleting.\n";
+        }
+        else {
+            $index++;
+        }
+    }
+}    
 
 return 1

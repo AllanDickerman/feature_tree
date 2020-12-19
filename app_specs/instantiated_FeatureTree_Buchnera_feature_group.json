@@ -1,0 +1,9 @@
+{
+    "sequences": "/allan@patricbrc.org/home/gene_tree/Buchnera_S20p_84",
+    "sequence_source": "feature_group",
+    "alphabet" : "Protein",
+    "protein_model": "LG",
+    "recipe" : "phyml",
+    "output_path" : "/allan@patricbrc.org/home/gene_tree/",
+    "output_file" : "buchnera_phyml_protein"
+}
