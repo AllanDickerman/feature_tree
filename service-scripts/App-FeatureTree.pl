@@ -97,11 +97,11 @@ sub build_tree {
             print UNALIGNED ">$id\n$unaligned_fasta->{$id}\n";
         }
         close UNALIGNED;
-        push @outputs, ["$tmpdir/$unaligned_seq_file", "contigs"]; #file type should be unaligned nt or aa
+        push @outputs, ["$tmpdir/$unaligned_seq_file", "txt"]; #file type should be unaligned nt or aa
         run_muscle("$tmpdir/$unaligned_seq_file", "$tmpdir/$seq_file_name");
         open my $ALIGNED, "$tmpdir/$seq_file_name" or die "could not open aligned fasta";
 
-        push @outputs, ["$tmpdir/$seq_file_name", "contigs"]; #file type should be aligned nt or aa
+        push @outputs, ["$tmpdir/$seq_file_name", "txt"]; #file type should be aligned nt or aa
         my $alignment = new Sequence_Alignment($ALIGNED);
         $alignment->end_trim(0.5);
         $alignment->delete_gappy_seqs(0.5);
@@ -110,11 +110,11 @@ sub build_tree {
         #open my $fasta_out, ">", "$tmpdir/$seq_file_name";
         #$alignment->write_fasta($fasta_out);
         #close $fasta_out;
-        push @outputs, ["$tmpdir/$seq_file_name", "contigs"]; #file type should be (trimmed?) aligned nt or aa
+        push @outputs, ["$tmpdir/$seq_file_name", "txt"]; #file type should be (trimmed?) aligned nt or aa
         if (lc($recipe) eq 'phyml') {
             $seq_file_name = basename($params->{sequences}).".phy";
             $alignment->write_phylip("$tmpdir/$seq_file_name");
-            push @outputs, ["$tmpdir/$seq_file_name", "contigs"]; #file type should be phylip nt or aa
+            push @outputs, ["$tmpdir/$seq_file_name", "txt"]; #file type should be phylip nt or aa
         }
     }
     run("echo $tmpdir && ls -ltr $tmpdir");
