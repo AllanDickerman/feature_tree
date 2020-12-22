@@ -68,6 +68,7 @@ sub build_tree {
     write_file($jdesc, $json->encode($params));
     
 
+    my @outputs; # array of tuples of (filename, filetype)
     print "copy data to temp dir\n";
     my $seq_file_name = '';
     if ($params->{sequence_source} eq 'local_file') {
@@ -96,13 +97,24 @@ sub build_tree {
             print UNALIGNED ">$id\n$unaligned_fasta->{$id}\n";
         }
         close UNALIGNED;
+        push @outputs, ["$tmpdir/$unaligned_seq_file", "contigs"]; #file type should be unaligned nt or aa
         run_muscle("$tmpdir/$unaligned_seq_file", "$tmpdir/$seq_file_name");
+        open my $ALIGNED, "$tmpdir/$seq_file_name" or die "could not open aligned fasta";
+
+        push @outputs, ["$tmpdir/$seq_file_name", "contigs"]; #file type should be aligned nt or aa
+        my $alignment = new Sequence_Alignment($ALIGNED);
+        $alignment->end_trim(0.5);
+        $alignment->delete_gappy_seqs(0.5);
+        $seq_file_name = basename($params->{sequences})."_trimmed.afa";
+        $alignment->write_fasta("$tmpdir/$seq_file_name");
+        #open my $fasta_out, ">", "$tmpdir/$seq_file_name";
+        #$alignment->write_fasta($fasta_out);
+        #close $fasta_out;
+        push @outputs, ["$tmpdir/$seq_file_name", "contigs"]; #file type should be (trimmed?) aligned nt or aa
         if (lc($recipe) eq 'phyml') {
-            open my $ALIGNED, "$tmpdir/$seq_file_name" or die "could not open aligned fasta";
-            my $alignment = new Sequence_Alignment($ALIGNED);
             $seq_file_name = basename($params->{sequences}).".phy";
-            open my $PHYLIP, ">", "$tmpdir/$seq_file_name" or die "could not open file to receive phylip";
-            $alignment->write_phylip($PHYLIP);
+            $alignment->write_phylip("$tmpdir/$seq_file_name");
+            push @outputs, ["$tmpdir/$seq_file_name", "contigs"]; #file type should be phylip nt or aa
         }
     }
     run("echo $tmpdir && ls -ltr $tmpdir");
@@ -117,11 +129,12 @@ sub build_tree {
     my $output_name = $params->{output_file};
     my $alphabet = $params->{alphabet};
     print STDERR "About to call tree program on $seq_file_name\n";
-    my @outputs;
     if (lc($recipe) eq 'raxml') {
-        @outputs = run_raxml($seq_file_name, $alphabet, $model, $output_name, $tmpdir);
+        my @tree_outputs = run_raxml($seq_file_name, $alphabet, $model, $output_name, $tmpdir);
+        push @outputs, @tree_outputs;
     } elsif (lc($recipe) eq 'phyml') {
-        @outputs = run_phyml($seq_file_name, $alphabet, $model, $output_name, $tmpdir);
+        my @tree_outputs = run_phyml($seq_file_name, $alphabet, $model, $output_name, $tmpdir);
+        push @outputs, @tree_outputs;
     } else {
         die "Unrecognized recipe: $recipe \n";
     }
@@ -141,21 +154,12 @@ sub build_tree {
             next;
         }
         
-        if ($type eq 'job_result') {
-            my $filename = basename($ofile);
-            print STDERR "Output folder = $output_folder\n";
-            print STDERR "Saving $ofile => $output_folder/$filename ...\n";
-            $app->workspace->save_file_to_file("$ofile", {},"$output_folder/$filename", $type, 1);
-        }
-        else
-        {
-            my $filename = basename($ofile);
-            print STDERR "Output folder = $output_folder\n";
-            print STDERR "Saving $ofile => $output_folder/$filename ...\n";
-            $app->workspace->save_file_to_file("$ofile", {}, "$output_folder/$filename", $type, 1,
-					       (-s "$ofile" > $shock_cutoff ? 1 : 0), # use shock for larger files
-					       $global_token);
-	}
+        my $filename = basename($ofile);
+        #print STDERR "Output folder = $output_folder\n";
+        print STDERR "Saving $ofile => $output_folder/$filename ...\n";
+        $app->workspace->save_file_to_file($ofile, {}, "$output_folder/$filename", $type, 1,
+                       (-s $ofile > $shock_cutoff ? 1 : 0), # use shock for larger files
+                       $global_token);
     }
     my $time2 = `date`;
     write_output("Start: $time1"."End:   $time2", "$tmpdir/DONE");

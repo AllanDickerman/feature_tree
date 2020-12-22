@@ -162,22 +162,38 @@ sub read_file {
 sub write_fasta {
   # write out in fasta format
     my $self = shift;
-    my $outfh = shift;
-    print STDERR "In write_fasta\n";
-    foreach my $id (@{$self->{_ids}}) {
-        print $outfh ">",$id, "\n", $self->{_seqs}->{$id}, "\n";
+    my $out = shift;
+    print STDERR "in write_fasta, ref(out) = ", ref($out), "\n"; 
+    my $FH = $out;
+    unless (ref($out) and ref($out) eq "GLOB") {
+        print STDERR "opening $out for fasta output.\n";
+        open(my $TEMP, ">", $out);
+        $FH = $TEMP;
     }
+    foreach my $id (@{$self->{_ids}}) {
+        print $FH ">",$id, "\n", $self->{_seqs}->{$id}, "\n";
+    }
+    if ($out ne $FH) {
+        print "closing $FH\n";
+        close $FH  #because we opened it
+    } 
 }
 
 sub write_phylip {
   # write out in phylip format
     my $self = shift;
-    my $outfh = shift;
+    my $out = shift;
     print STDERR "In write_phylip\n";
     print STDERR "self = $self\n";
-    print STDERR "file handle = $outfh\n";
+    print STDERR "out = $out\n";
     warn "alignment status is $self->{_is_aligned} in write_phylip()" unless $self->{_is_aligned};
-    print $outfh $self->get_ntaxa(), "  ", $self->get_length(), "\n";
+    my $FH = $out;
+    unless (ref($out) and ref($out) eq "GLOB") {
+        print STDERR "opening $out for fasta output.\n";
+        open(my $TEMP, ">", $out);
+        $FH = $TEMP;
+    }
+    print $FH $self->get_ntaxa(), "  ", $self->get_length(), "\n";
     my $maxIdLength = 0;
     foreach my $id (@{$self->{_ids}}) {
         $maxIdLength = length($id) if length($id) > $maxIdLength;
@@ -186,18 +202,24 @@ sub write_phylip {
         my $seq = $self->{_seqs}->{$id};
         next unless $seq;
         #$seq = ambiguateEndGaps($seq) if ($opt_e);
-	    printf($outfh "%-${maxIdLength}s %s\n", $id, $seq);
+	    printf($FH "%-${maxIdLength}s %s\n", $id, $seq);
     }
+    if ($out ne $FH) {
+        print "closing $FH\n";
+        close $FH  #because we opened it
+    } 
 }
 
 sub calc_column_gap_count {
     my $self = shift;
     print STDERR "In calc_column_gap_count\n";
     my @gap_count;
-    $#gap_count = $self->{_length};
+    $#gap_count = $self->{_length}-1;
     for my $id (@{$self->{_ids}}) {
-        for my $i (0..$self->{_length}-1) {
-            $gap_count[$i] += substr($self->{_seqs}->{$id},$i, 1) eq '-';
+        my @str_as_array = split('', $self->{_seqs}->{$id});
+        for my $i (0 .. $#str_as_array) {
+            $gap_count[$i] += $str_as_array[$i] eq '-';
+            #$gap_count[$i] += substr($self->{_seqs}->{$id},$i, 1) eq '-';
         }
     }
     return \@gap_count;
@@ -215,6 +237,7 @@ sub end_trim {
     my $start = 0;
     my $vis = '';
     my $vis2 = '';
+    #print "Length of \@gap_count = ", scalar(@$gap_count), ", vs self->length = $self->{_length}\n";
     for my $i (0 .. $self->{_length}-1) {
         my $prop10 = int(10 * $gap_count->[$i] / $self->get_ntaxa());
         $prop10 = 9 if $prop10 > 9;
@@ -222,14 +245,14 @@ sub end_trim {
         $vis2 .= $i % 10;
     }
 
-    #print "$vis\n$vis2\n";
+    print "$vis\n$vis2\n";
     $start++ while ($start < $self->{_length}-1 and $gap_count->[$start] > $max_gaps);
     my $end = $self->{_length}-1;
     $end-- while ($end and $gap_count->[$end] > $max_gaps);
     my $len = $end - $start + 1;
     print "Trim up to $start and after $end\n";
-    #print substr($vis, $start, $len), "\n";
-    #print substr($vis2, $start, $len), "\n";
+    print substr($vis, $start, $len), "\n";
+    print substr($vis2, $start, $len), "\n";
     for my $id (@{$self->{_ids}}) {
             $self->{_seqs}->{$id} = substr($self->{_seqs}->{$id}, $start, $len);
     }
