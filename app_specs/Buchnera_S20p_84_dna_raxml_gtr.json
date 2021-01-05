@@ -1,0 +1,10 @@
+{
+    "alphabet": "dna",
+    "recipe": "RAxML",
+    "protein_model": "GTR",
+    "sequence_source": "feature_group",
+    "sequences":
+        "/allan@patricbrc.org/home/gene_tree/Buchnera_S20p_84",
+    "output_path": "/allan@patricbrc.org/home/gene_tree",
+    "output_file": "Buchnera_S20p_84_dna_raxml_gtr"
+}

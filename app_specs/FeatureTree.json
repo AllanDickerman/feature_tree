@@ -9,13 +9,14 @@
             "id": "sequences",
             "label": "Input Sequences",
             "required": 1,
+            "allow_multiple": 0,
             "type": "string"
         },
         {
             "id": "sequence_source",
             "type" : "enum",
             "default": "ws",
-            "enum" : ["ws", "upload", "local_file"]
+            "enum" : ["ws", "upload", "local_file", "feature_group"]
         },
         {
             "id": "aligned_status",

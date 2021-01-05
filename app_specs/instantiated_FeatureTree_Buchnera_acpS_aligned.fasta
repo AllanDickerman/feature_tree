@@ -1,0 +1,8 @@
+{
+    "sequences": "/homes/allan/projects/gene_tree/Buchnera_acpS_msa.fasta",
+    "sequence_source": "local_file",
+    "alphabet" : "Protein",
+    "recipe" : "raxml",
+    "output_path" : "/allan@patricbrc.org/home/gene_tree/",
+    "output_file" : "Buchnera_acpS_raxml"
+}
