@@ -73,22 +73,22 @@ sub build_tree {
     my $seq_file_name = '';
     if ($params->{sequence_source} eq 'local_file') {
         $seq_file_name = basename($params->{sequences});
-        print STDERR "input data file is $seq_file_name\n";
+        print STDERR "local_file input data is $seq_file_name\n";
         copy($params->{sequences}, "$tmpdir/$seq_file_name") or die ("could not copy $params->{sequences} to $tmpdir/$seq_file_name");
     }
     elsif ($params->{sequence_source} eq 'ws') {
         $seq_file_name = basename($params->{sequences});
-        print STDERR "input data file is $seq_file_name\n";
+        print STDERR "workspace input data is $seq_file_name\n";
         $app->workspace->download_file($params->{sequences}, "$tmpdir/$seq_file_name", 1, $global_token);
     }
     elsif ($params->{sequence_source} eq 'upload') {
         $seq_file_name = $params->{output_file}."_sequence_input.txt";
-        print STDERR "input data file is $seq_file_name\n";
+        print STDERR "uploaded input data is $seq_file_name\n";
         File::Slurp::write_file("$tmpdir/$seq_file_name", $params->{sequences})
     }
     elsif ($params->{sequence_source} eq 'feature_group') {
         # need to get sequences from database by feature_id
-        print STDERR "input file is feature_group: \n", $params->{sequences},"\n";
+        print STDERR "feature group input is $params->{sequences}\n";
         my $unaligned_fasta = get_feature_group_sequences($params->{sequences}, $params->{alphabet});
         $seq_file_name = basename($params->{sequences}).".afa";
         my $unaligned_seq_file = basename($params->{sequences})."_unaligned.fa";
